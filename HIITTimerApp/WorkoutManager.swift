@@ -5,6 +5,7 @@ import AVFoundation
 class WorkoutManager: ObservableObject {
     @Published var isActive = false
     @Published var isPaused = false
+    @Published var isCompleted = false
     @Published var currentWorkout: Workout?
     @Published var currentPhase: WorkoutPhase = .warmup
     @Published var currentRound = 1
@@ -86,6 +87,7 @@ class WorkoutManager: ObservableObject {
     func stop() {
         isActive = false
         isPaused = false
+        isCompleted = false
         currentWorkout = nil
         currentRound = 1
         remainingTime = 0
@@ -154,14 +156,10 @@ class WorkoutManager: ObservableObject {
         remainingTime = 0
         timer?.invalidate()
         timer = nil
-        
+        isCompleted = true
+
         soundManager.playIntervalChime()
         soundManager.triggerHaptic(style: .success)
-        
-        // Auto-dismiss after 3 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-            self?.stop()
-        }
     }
     
     // MARK: - Preset Management

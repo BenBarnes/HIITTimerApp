@@ -77,84 +77,115 @@ struct MenuButton: View {
 
 struct WorkoutActiveView: View {
     @ObservedObject var workoutManager: WorkoutManager
-    
+
     var body: some View {
-        VStack(spacing: 40) {
-            // Current phase indicator
-            Text(workoutManager.currentPhaseText)
-                .font(.system(size: 32, weight: .bold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 30)
-                .padding(.vertical, 15)
-                .background(workoutManager.currentPhaseColor.opacity(0.8))
-                .cornerRadius(20)
-            
-            // Timer display
-            Text(workoutManager.timeString)
-                .font(.system(size: 90, weight: .thin, design: .monospaced))
-                .foregroundColor(.white)
-            
-            // Progress indicator
-            if let workout = workoutManager.currentWorkout {
-                VStack(spacing: 10) {
-                    Text("Round \(workoutManager.currentRound)/\(workout.rounds)")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.white)
-                    
-                    ProgressView(value: Double(workoutManager.currentRound), total: Double(workout.rounds))
-                        .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                        .frame(width: 250)
-                        .scaleEffect(x: 1, y: 2, anchor: .center)
+        if workoutManager.isCompleted {
+            WorkoutCompleteView(workoutManager: workoutManager)
+        } else {
+            VStack(spacing: 40) {
+                // Current phase indicator
+                Text(workoutManager.currentPhaseText)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 15)
+                    .background(workoutManager.currentPhaseColor.opacity(0.8))
+                    .cornerRadius(20)
+
+                // Timer display
+                Text(workoutManager.timeString)
+                    .font(.system(size: 90, weight: .thin, design: .monospaced))
+                    .foregroundColor(.white)
+
+                // Progress indicator
+                if let workout = workoutManager.currentWorkout {
+                    VStack(spacing: 10) {
+                        Text("Round \(workoutManager.currentRound)/\(workout.rounds)")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(.white)
+
+                        ProgressView(value: Double(workoutManager.currentRound), total: Double(workout.rounds))
+                            .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                            .frame(width: 250)
+                            .scaleEffect(x: 1, y: 2, anchor: .center)
+                    }
+                }
+
+                // Control buttons
+                HStack(spacing: 30) {
+                    if workoutManager.isPaused {
+                        Button(action: {
+                            workoutManager.resume()
+                        }) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white)
+                                .frame(width: 70, height: 70)
+                                .background(Color.green)
+                                .clipShape(Circle())
+                        }
+                    } else {
+                        Button(action: {
+                            workoutManager.pause()
+                        }) {
+                            Image(systemName: "pause.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white)
+                                .frame(width: 70, height: 70)
+                                .background(Color.orange)
+                                .clipShape(Circle())
+                        }
+                    }
+
+                    Button(action: {
+                        workoutManager.stop()
+                    }) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                            .frame(width: 70, height: 70)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                    }
+
+                    Button(action: {
+                        workoutManager.skipPhase()
+                    }) {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                            .frame(width: 70, height: 70)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                    }
                 }
             }
-            
-            // Control buttons
-            HStack(spacing: 30) {
-                if workoutManager.isPaused {
-                    Button(action: {
-                        workoutManager.resume()
-                    }) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .frame(width: 70, height: 70)
-                            .background(Color.green)
-                            .clipShape(Circle())
-                    }
-                } else {
-                    Button(action: {
-                        workoutManager.pause()
-                    }) {
-                        Image(systemName: "pause.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .frame(width: 70, height: 70)
-                            .background(Color.orange)
-                            .clipShape(Circle())
-                    }
-                }
-                
-                Button(action: {
-                    workoutManager.stop()
-                }) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.white)
-                        .frame(width: 70, height: 70)
-                        .background(Color.red)
-                        .clipShape(Circle())
-                }
-                
-                Button(action: {
-                    workoutManager.skipPhase()
-                }) {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.white)
-                        .frame(width: 70, height: 70)
-                        .background(Color.blue)
-                        .clipShape(Circle())
-                }
+        }
+    }
+}
+
+struct WorkoutCompleteView: View {
+    @ObservedObject var workoutManager: WorkoutManager
+
+    var body: some View {
+        VStack(spacing: 40) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 100))
+                .foregroundColor(.green)
+
+            Text("Workout Finished")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(.white)
+
+            Button(action: {
+                workoutManager.stop()
+            }) {
+                Text("OK")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 200, height: 60)
+                    .background(Color.green)
+                    .cornerRadius(15)
             }
         }
     }
