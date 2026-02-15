@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AVFoundation
+import UIKit
 
 class WorkoutManager: ObservableObject {
     @Published var isActive = false
@@ -57,7 +58,10 @@ class WorkoutManager: ObservableObject {
         currentRound = 1
         isActive = true
         isPaused = false
-        
+
+        // Prevent screen from auto-locking during workout
+        UIApplication.shared.isIdleTimerDisabled = true
+
         if workout.warmupDuration > 0 {
             currentPhase = .warmup
             remainingTime = workout.warmupDuration
@@ -69,7 +73,7 @@ class WorkoutManager: ObservableObject {
             // Play chime immediately when starting
             soundManager.playIntervalChime()
         }
-        
+
         startTimer()
     }
     
@@ -77,10 +81,17 @@ class WorkoutManager: ObservableObject {
         isPaused = true
         timer?.invalidate()
         timer = nil
+
+        // Allow screen to lock when paused
+        UIApplication.shared.isIdleTimerDisabled = false
     }
     
     func resume() {
         isPaused = false
+
+        // Prevent screen from locking when workout resumes
+        UIApplication.shared.isIdleTimerDisabled = true
+
         startTimer()
     }
     
@@ -93,6 +104,9 @@ class WorkoutManager: ObservableObject {
         remainingTime = 0
         timer?.invalidate()
         timer = nil
+
+        // Re-enable screen auto-lock
+        UIApplication.shared.isIdleTimerDisabled = false
     }
     
     func skipPhase() {
