@@ -227,49 +227,14 @@ struct Workout: Identifiable, Codable {
     var workDuration: Int
     var restDuration: Int
     var rounds: Int
-    var sound: WorkoutSound
-    
-    init(id: UUID = UUID(), name: String, warmupDuration: Int, workDuration: Int, restDuration: Int, rounds: Int, sound: WorkoutSound = .chime) {
+
+    init(id: UUID = UUID(), name: String, warmupDuration: Int, workDuration: Int, restDuration: Int, rounds: Int) {
         self.id = id
         self.name = name
         self.warmupDuration = warmupDuration
         self.workDuration = workDuration
         self.restDuration = restDuration
         self.rounds = rounds
-        self.sound = sound
-    }
-}
-
-enum WorkoutSound: String, CaseIterable, Codable {
-    case chime = "Chime"
-    case bell = "Bell"
-    case tone = "Tone"
-    case alert = "Alert"
-    case horn = "Horn"
-    case beep = "Beep"
-    case complete = "Complete"
-    
-    var displayName: String {
-        return self.rawValue
-    }
-    
-    var systemSoundID: SystemSoundID {
-        switch self {
-        case .chime:
-            return 1013
-        case .bell:
-            return 1005
-        case .tone:
-            return 1304
-        case .alert:
-            return 1007
-        case .horn:
-            return 1009
-        case .beep:
-            return 1103
-        case .complete:
-            return 1016
-        }
     }
 }
 

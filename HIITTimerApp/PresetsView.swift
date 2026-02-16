@@ -100,15 +100,9 @@ struct PresetRow: View {
                     .foregroundColor(.blue)
             }
             
-            HStack {
-                Text("\(preset.rounds) rounds")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text("Sound: \(preset.sound.displayName)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            Text("\(preset.rounds) rounds")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding(.vertical, 5)
     }
@@ -142,7 +136,6 @@ struct EditPresetView: View {
     @State private var restMinutes = 0
     @State private var restSeconds = 0
     @State private var rounds = 1
-    @State private var selectedSound: WorkoutSound = .chime
     
     var body: some View {
         NavigationView {
@@ -246,19 +239,7 @@ struct EditPresetView: View {
                                 .padding(.vertical, 8)
                         }
                         .padding(.horizontal)
-                        
-                        // Sound selection
-                        GroupBox(label: Label("Alert Sound", systemImage: "speaker.wave.2.fill")) {
-                            Picker("Sound", selection: $selectedSound) {
-                                ForEach(WorkoutSound.allCases, id: \.self) { sound in
-                                    Text(sound.displayName).tag(sound)
-                                }
-                            }
-                            .pickerStyle(MenuPickerStyle())
-                            .padding(.vertical, 8)
-                        }
-                        .padding(.horizontal)
-                        
+
                         Spacer(minLength: 20)
                     }
                 }
@@ -293,7 +274,6 @@ struct EditPresetView: View {
         restMinutes = preset.restDuration / 60
         restSeconds = preset.restDuration % 60
         rounds = preset.rounds
-        selectedSound = preset.sound
         print("Data loaded - Name: \(workoutName), Work: \(workMinutes):\(workSeconds), Rest: \(restMinutes):\(restSeconds), Rounds: \(rounds)")
     }
     
@@ -301,15 +281,14 @@ struct EditPresetView: View {
         let warmupTime = warmupMinutes * 60 + warmupSeconds
         let workTime = workMinutes * 60 + workSeconds
         let restTime = restMinutes * 60 + restSeconds
-        
+
         let updatedWorkout = Workout(
             id: preset.id,
             name: workoutName,
             warmupDuration: warmupTime,
             workDuration: workTime,
             restDuration: restTime,
-            rounds: rounds,
-            sound: selectedSound
+            rounds: rounds
         )
         
         workoutManager.updatePreset(updatedWorkout)

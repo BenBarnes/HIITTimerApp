@@ -15,7 +15,6 @@ struct WorkoutSetupView: View {
     @State private var restMinutes = 0
     @State private var restSeconds = 15
     @State private var rounds = 8
-    @State private var selectedSound: WorkoutSound = .chime
     
     // Custom mode
     @State private var customIntervals: [CustomInterval] = []
@@ -48,9 +47,7 @@ struct WorkoutSetupView: View {
                         } else {
                             customSetupView
                         }
-                        
-                        soundSelectionView
-                        
+
                         // Save as preset option
                         Toggle("Save as Preset", isOn: $saveAsPreset)
                             .padding(.horizontal)
@@ -172,19 +169,7 @@ struct WorkoutSetupView: View {
         }
         .padding(.horizontal)
     }
-    
-    var soundSelectionView: some View {
-        GroupBox(label: Label("Alert Sound", systemImage: "speaker.wave.2.fill")) {
-            Picker("Sound", selection: $selectedSound) {
-                ForEach(WorkoutSound.allCases, id: \.self) { sound in
-                    Text(sound.displayName).tag(sound)
-                }
-            }
-            .pickerStyle(MenuPickerStyle())
-        }
-        .padding(.horizontal)
-    }
-    
+
     var startButton: some View {
         Button(action: startWorkout) {
             Text("Start Workout")
@@ -223,14 +208,13 @@ struct WorkoutSetupView: View {
         let warmupTime = warmupMinutes * 60 + warmupSeconds
         let workTime = workMinutes * 60 + workSeconds
         let restTime = restMinutes * 60 + restSeconds
-        
+
         let workout = Workout(
             name: workoutName.isEmpty ? "HIIT Workout" : workoutName,
             warmupDuration: warmupTime,
             workDuration: workTime,
             restDuration: restTime,
-            rounds: rounds,
-            sound: selectedSound
+            rounds: rounds
         )
         
         if saveAsPreset && !workoutName.isEmpty {
