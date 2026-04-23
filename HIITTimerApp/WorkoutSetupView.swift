@@ -27,7 +27,7 @@ struct WorkoutSetupView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color(UIColor.systemGroupedBackground)
                     .ignoresSafeArea()
@@ -77,89 +77,11 @@ struct WorkoutSetupView: View {
     
     var simpleSetupView: some View {
         VStack(spacing: 20) {
-            warmupPicker
-            workPicker
-            restPicker
+            DurationPicker(label: "Warm-up", icon: "figure.walk", minutes: $warmupMinutes, seconds: $warmupSeconds)
+            DurationPicker(label: "Work Interval", icon: "flame.fill", minutes: $workMinutes, seconds: $workSeconds)
+            DurationPicker(label: "Rest Interval", icon: "pause.circle.fill", minutes: $restMinutes, seconds: $restSeconds)
             roundsStepper
         }
-    }
-    
-    var warmupPicker: some View {
-        GroupBox(label: Label("Warm-up", systemImage: "figure.walk")) {
-            HStack {
-                Picker("Minutes", selection: $warmupMinutes) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("min")
-                
-                Picker("Seconds", selection: $warmupSeconds) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("sec")
-            }
-            .frame(height: 100)
-        }
-        .padding(.horizontal)
-    }
-    
-    var workPicker: some View {
-        GroupBox(label: Label("Work Interval", systemImage: "flame.fill")) {
-            HStack {
-                Picker("Minutes", selection: $workMinutes) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("min")
-                
-                Picker("Seconds", selection: $workSeconds) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("sec")
-            }
-            .frame(height: 100)
-        }
-        .padding(.horizontal)
-    }
-    
-    var restPicker: some View {
-        GroupBox(label: Label("Rest Interval", systemImage: "pause.circle.fill")) {
-            HStack {
-                Picker("Minutes", selection: $restMinutes) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("min")
-                
-                Picker("Seconds", selection: $restSeconds) {
-                    ForEach(0..<60, id: \.self) { i in
-                        Text("\(i)").tag(i)
-                    }
-                }
-                .pickerStyle(WheelPickerStyle())
-                .frame(width: 80)
-                Text("sec")
-            }
-            .frame(height: 100)
-        }
-        .padding(.horizontal)
     }
     
     var roundsStepper: some View {
@@ -223,6 +145,39 @@ struct WorkoutSetupView: View {
         
         workoutManager.startWorkout(workout)
         dismiss()
+    }
+}
+
+struct DurationPicker: View {
+    let label: String
+    let icon: String
+    @Binding var minutes: Int
+    @Binding var seconds: Int
+    
+    var body: some View {
+        GroupBox(label: Label(label, systemImage: icon)) {
+            HStack {
+                Picker("Minutes", selection: $minutes) {
+                    ForEach(0..<60, id: \.self) { i in
+                        Text("\(i)").tag(i)
+                    }
+                }
+                .pickerStyle(WheelPickerStyle())
+                .frame(width: 80)
+                Text("min")
+                
+                Picker("Seconds", selection: $seconds) {
+                    ForEach(0..<60, id: \.self) { i in
+                        Text("\(i)").tag(i)
+                    }
+                }
+                .pickerStyle(WheelPickerStyle())
+                .frame(width: 80)
+                Text("sec")
+            }
+            .frame(height: 100)
+        }
+        .padding(.horizontal)
     }
 }
 

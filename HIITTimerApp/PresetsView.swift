@@ -6,7 +6,7 @@ struct PresetsView: View {
     @State private var editingPreset: Workout?
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color(UIColor.systemGroupedBackground)
                     .ignoresSafeArea()
@@ -42,9 +42,7 @@ struct PresetsView: View {
                                     }
                                     
                                     Button {
-                                        print("Edit button tapped for: \(preset.name)")
                                         editingPreset = preset
-                                        print("editingPreset set to: \(preset.name)")
                                     } label: {
                                         Label("Edit", systemImage: "pencil")
                                     }
@@ -138,7 +136,7 @@ struct EditPresetView: View {
     @State private var rounds = 1
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color(UIColor.systemGroupedBackground)
                     .ignoresSafeArea()
@@ -157,80 +155,9 @@ struct EditPresetView: View {
                         }
                         .padding(.top)
                         
-                        // Warm-up
-                        GroupBox(label: Label("Warm-up", systemImage: "figure.walk")) {
-                            HStack {
-                                Picker("Minutes", selection: $warmupMinutes) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("min")
-                                
-                                Picker("Seconds", selection: $warmupSeconds) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("sec")
-                            }
-                            .frame(height: 120)
-                        }
-                        .padding(.horizontal)
-                        
-                        // Work interval
-                        GroupBox(label: Label("Work Interval", systemImage: "flame.fill")) {
-                            HStack {
-                                Picker("Minutes", selection: $workMinutes) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("min")
-                                
-                                Picker("Seconds", selection: $workSeconds) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("sec")
-                            }
-                            .frame(height: 120)
-                        }
-                        .padding(.horizontal)
-                        
-                        // Rest interval
-                        GroupBox(label: Label("Rest Interval", systemImage: "pause.circle.fill")) {
-                            HStack {
-                                Picker("Minutes", selection: $restMinutes) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("min")
-                                
-                                Picker("Seconds", selection: $restSeconds) {
-                                    ForEach(0..<60, id: \.self) { i in
-                                        Text("\(i)").tag(i)
-                                    }
-                                }
-                                .pickerStyle(WheelPickerStyle())
-                                .frame(width: 80)
-                                Text("sec")
-                            }
-                            .frame(height: 120)
-                        }
-                        .padding(.horizontal)
+                        DurationPicker(label: "Warm-up", icon: "figure.walk", minutes: $warmupMinutes, seconds: $warmupSeconds)
+                        DurationPicker(label: "Work Interval", icon: "flame.fill", minutes: $workMinutes, seconds: $workSeconds)
+                        DurationPicker(label: "Rest Interval", icon: "pause.circle.fill", minutes: $restMinutes, seconds: $restSeconds)
                         
                         // Number of rounds
                         GroupBox(label: Label("Rounds", systemImage: "repeat")) {
@@ -259,7 +186,6 @@ struct EditPresetView: View {
                 }
             }
             .onAppear {
-                print("EditPresetView appeared for: \(preset.name)")
                 loadPresetData()
             }
         }
@@ -274,7 +200,6 @@ struct EditPresetView: View {
         restMinutes = preset.restDuration / 60
         restSeconds = preset.restDuration % 60
         rounds = preset.rounds
-        print("Data loaded - Name: \(workoutName), Work: \(workMinutes):\(workSeconds), Rest: \(restMinutes):\(restSeconds), Rounds: \(rounds)")
     }
     
     func saveChanges() {
@@ -291,8 +216,7 @@ struct EditPresetView: View {
             rounds: rounds
         )
         
-        workoutManager.updatePreset(updatedWorkout)
-        print("Preset saved: \(workoutName)")
+        workoutManager.savePreset(updatedWorkout)
         dismiss()
     }
 }

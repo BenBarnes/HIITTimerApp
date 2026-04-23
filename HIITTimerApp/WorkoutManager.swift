@@ -122,7 +122,6 @@ class WorkoutManager: ObservableObject {
                 // Play countdown beeps at exactly 3, 2, and 1 seconds remaining
                 // Check BEFORE decrementing
                 if self.remainingTime == 3 || self.remainingTime == 2 || self.remainingTime == 1 {
-                    print("Countdown beep: \(self.remainingTime) seconds remaining")
                     self.soundManager.playCountdownBeep()
                 }
                 
@@ -187,13 +186,6 @@ class WorkoutManager: ObservableObject {
         savePresetsToUserDefaults()
     }
     
-    func updatePreset(_ workout: Workout) {
-        if let index = presets.firstIndex(where: { $0.id == workout.id }) {
-            presets[index] = workout
-            savePresetsToUserDefaults()
-        }
-    }
-    
     func deletePreset(_ workout: Workout) {
         presets.removeAll { $0.id == workout.id }
         savePresetsToUserDefaults()
@@ -252,9 +244,6 @@ class SoundManager {
             // Use .playback category to bypass silent switch
             try audioSession.setCategory(.playback, mode: .default, options: [])
             try audioSession.setActive(true)
-            print("✓ Audio session configured - sounds will bypass silent switch")
-            
-            // Load audio files
             loadAudioFiles()
         } catch {
             print("⚠️ Audio session setup failed: \(error.localizedDescription)")
@@ -262,32 +251,16 @@ class SoundManager {
     }
     
     private func loadAudioFiles() {
-        // Load countdown beep
         if let beepURL = Bundle.main.url(forResource: "countdown_beep", withExtension: "wav") {
-            do {
-                countdownBeepPlayer = try AVAudioPlayer(contentsOf: beepURL)
-                countdownBeepPlayer?.prepareToPlay()
-                countdownBeepPlayer?.volume = 0.8
-                print("✓ Countdown beep loaded")
-            } catch {
-                print("⚠️ Failed to load countdown beep: \(error.localizedDescription)")
-            }
-        } else {
-            print("⚠️ countdown_beep.wav not found in bundle")
+            countdownBeepPlayer = try? AVAudioPlayer(contentsOf: beepURL)
+            countdownBeepPlayer?.prepareToPlay()
+            countdownBeepPlayer?.volume = 0.8
         }
         
-        // Load interval chime
         if let chimeURL = Bundle.main.url(forResource: "interval_chime", withExtension: "wav") {
-            do {
-                intervalChimePlayer = try AVAudioPlayer(contentsOf: chimeURL)
-                intervalChimePlayer?.prepareToPlay()
-                intervalChimePlayer?.volume = 1.0
-                print("✓ Interval chime loaded")
-            } catch {
-                print("⚠️ Failed to load interval chime: \(error.localizedDescription)")
-            }
-        } else {
-            print("⚠️ interval_chime.wav not found in bundle")
+            intervalChimePlayer = try? AVAudioPlayer(contentsOf: chimeURL)
+            intervalChimePlayer?.prepareToPlay()
+            intervalChimePlayer?.volume = 1.0
         }
     }
     
@@ -295,11 +268,8 @@ class SoundManager {
         if let player = countdownBeepPlayer {
             player.currentTime = 0
             player.play()
-            print("🔊 Countdown beep")
         } else {
-            // Fallback to system sound
             AudioServicesPlaySystemSound(1103)
-            print("🔊 Countdown beep (system sound fallback)")
         }
     }
     
@@ -307,11 +277,8 @@ class SoundManager {
         if let player = intervalChimePlayer {
             player.currentTime = 0
             player.play()
-            print("🔔 Interval chime")
         } else {
-            // Fallback to system sound
             AudioServicesPlaySystemSound(1013)
-            print("🔔 Interval chime (system sound fallback)")
         }
     }
     

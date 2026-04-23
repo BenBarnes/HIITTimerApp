@@ -1,5 +1,4 @@
 import SwiftUI
-import AVFoundation
 
 struct ContentView: View {
     @StateObject private var workoutManager = WorkoutManager()
@@ -7,7 +6,7 @@ struct ContentView: View {
     @State private var showingWorkoutSetup = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     gradient: Gradient(colors: [Color.orange.opacity(0.7), Color.red.opacity(0.7)]),
