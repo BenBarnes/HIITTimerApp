@@ -82,25 +82,56 @@ struct PresetRow: View {
                     .foregroundColor(.gray)
             }
             
-            HStack(spacing: 15) {
-                if preset.warmupDuration > 0 {
-                    Label("\(formatTime(preset.warmupDuration)) warmup", systemImage: "figure.walk")
-                        .font(.caption)
-                        .foregroundColor(.orange)
+            if preset.isCustom, let intervals = preset.customIntervals {
+                HStack(spacing: 4) {
+                    ForEach(intervals.prefix(8)) { interval in
+                        Circle()
+                            .fill(interval.color.swiftUIColor)
+                            .frame(width: 10, height: 10)
+                    }
+                    if intervals.count > 8 {
+                        Text("+\(intervals.count - 8)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
-                Label("\(formatTime(preset.workDuration)) work", systemImage: "flame.fill")
-                    .font(.caption)
-                    .foregroundColor(.red)
+                HStack(spacing: 15) {
+                    Label("\(intervals.count) intervals", systemImage: "list.number")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                    if let rc = preset.repeatCount, rc > 1 {
+                        Label("\(rc)x repeat", systemImage: "repeat")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 
-                Label("\(formatTime(preset.restDuration)) rest", systemImage: "pause.circle.fill")
+                let totalSeconds = intervals.reduce(0) { $0 + $1.duration } * max(preset.repeatCount ?? 1, 1)
+                Text("Total: \(formatTime(totalSeconds))")
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(.secondary)
+            } else {
+                HStack(spacing: 15) {
+                    if preset.warmupDuration > 0 {
+                        Label("\(formatTime(preset.warmupDuration)) warmup", systemImage: "figure.walk")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    
+                    Label("\(formatTime(preset.workDuration)) work", systemImage: "flame.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    
+                    Label("\(formatTime(preset.restDuration)) rest", systemImage: "pause.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+                
+                Text("\(preset.rounds) rounds")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            
-            Text("\(preset.rounds) rounds")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
         .padding(.vertical, 5)
     }
@@ -127,6 +158,7 @@ struct EditPresetView: View {
     let preset: Workout
     
     @State private var workoutName = ""
+    // Simple mode state
     @State private var warmupMinutes = 0
     @State private var warmupSeconds = 0
     @State private var workMinutes = 0
@@ -134,6 +166,9 @@ struct EditPresetView: View {
     @State private var restMinutes = 0
     @State private var restSeconds = 0
     @State private var rounds = 1
+    // Custom mode state
+    @State private var customIntervals: [CustomInterval] = []
+    @State private var repeatCount = 1
     
     var body: some View {
         NavigationStack {
@@ -143,7 +178,6 @@ struct EditPresetView: View {
                 
                 ScrollView {
                     VStack(spacing: 25) {
-                        // Workout Name
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Workout Name")
                                 .font(.headline)
@@ -155,17 +189,20 @@ struct EditPresetView: View {
                         }
                         .padding(.top)
                         
-                        DurationPicker(label: "Warm-up", icon: "figure.walk", minutes: $warmupMinutes, seconds: $warmupSeconds)
-                        DurationPicker(label: "Work Interval", icon: "flame.fill", minutes: $workMinutes, seconds: $workSeconds)
-                        DurationPicker(label: "Rest Interval", icon: "pause.circle.fill", minutes: $restMinutes, seconds: $restSeconds)
-                        
-                        // Number of rounds
-                        GroupBox(label: Label("Rounds", systemImage: "repeat")) {
-                            Stepper("\(rounds) rounds", value: $rounds, in: 1...99)
-                                .padding(.horizontal)
-                                .padding(.vertical, 8)
+                        if preset.isCustom {
+                            CustomIntervalEditor(intervals: $customIntervals, repeatCount: $repeatCount)
+                        } else {
+                            DurationPicker(label: "Warm-up", icon: "figure.walk", minutes: $warmupMinutes, seconds: $warmupSeconds)
+                            DurationPicker(label: "Work Interval", icon: "flame.fill", minutes: $workMinutes, seconds: $workSeconds)
+                            DurationPicker(label: "Rest Interval", icon: "pause.circle.fill", minutes: $restMinutes, seconds: $restSeconds)
+                            
+                            GroupBox(label: Label("Rounds", systemImage: "repeat")) {
+                                Stepper("\(rounds) rounds", value: $rounds, in: 1...99)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 8)
+                            }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
 
                         Spacer(minLength: 20)
                     }
@@ -193,29 +230,42 @@ struct EditPresetView: View {
     
     func loadPresetData() {
         workoutName = preset.name
-        warmupMinutes = preset.warmupDuration / 60
-        warmupSeconds = preset.warmupDuration % 60
-        workMinutes = preset.workDuration / 60
-        workSeconds = preset.workDuration % 60
-        restMinutes = preset.restDuration / 60
-        restSeconds = preset.restDuration % 60
-        rounds = preset.rounds
+        if preset.isCustom {
+            customIntervals = preset.customIntervals ?? []
+            repeatCount = preset.repeatCount ?? 1
+        } else {
+            warmupMinutes = preset.warmupDuration / 60
+            warmupSeconds = preset.warmupDuration % 60
+            workMinutes = preset.workDuration / 60
+            workSeconds = preset.workDuration % 60
+            restMinutes = preset.restDuration / 60
+            restSeconds = preset.restDuration % 60
+            rounds = preset.rounds
+        }
     }
     
     func saveChanges() {
-        let warmupTime = warmupMinutes * 60 + warmupSeconds
-        let workTime = workMinutes * 60 + workSeconds
-        let restTime = restMinutes * 60 + restSeconds
-
-        let updatedWorkout = Workout(
-            id: preset.id,
-            name: workoutName,
-            warmupDuration: warmupTime,
-            workDuration: workTime,
-            restDuration: restTime,
-            rounds: rounds
-        )
-        
+        let updatedWorkout: Workout
+        if preset.isCustom {
+            updatedWorkout = Workout(
+                id: preset.id,
+                name: workoutName,
+                customIntervals: customIntervals,
+                repeatCount: repeatCount
+            )
+        } else {
+            let warmupTime = warmupMinutes * 60 + warmupSeconds
+            let workTime = workMinutes * 60 + workSeconds
+            let restTime = restMinutes * 60 + restSeconds
+            updatedWorkout = Workout(
+                id: preset.id,
+                name: workoutName,
+                warmupDuration: warmupTime,
+                workDuration: workTime,
+                restDuration: restTime,
+                rounds: rounds
+            )
+        }
         workoutManager.savePreset(updatedWorkout)
         dismiss()
     }

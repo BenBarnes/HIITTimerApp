@@ -99,14 +99,23 @@ struct WorkoutActiveView: View {
                 // Progress indicator
                 if let workout = workoutManager.currentWorkout {
                     VStack(spacing: 10) {
-                        Text("Round \(workoutManager.currentRound)/\(workout.rounds)")
-                            .font(.system(size: 24, weight: .medium))
-                            .foregroundColor(.white)
-
-                        ProgressView(value: Double(workoutManager.currentRound), total: Double(workout.rounds))
-                            .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                            .frame(width: 250)
-                            .scaleEffect(x: 1, y: 2, anchor: .center)
+                        if workout.isCustom {
+                            Text("Interval \(workoutManager.currentIntervalIndex + 1)/\(workoutManager.totalIntervalCount)")
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundColor(.white)
+                            ProgressView(value: Double(workoutManager.currentIntervalIndex + 1), total: Double(workoutManager.totalIntervalCount))
+                                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                                .frame(width: 250)
+                                .scaleEffect(x: 1, y: 2, anchor: .center)
+                        } else {
+                            Text("Round \(workoutManager.currentRound)/\(workout.rounds)")
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundColor(.white)
+                            ProgressView(value: Double(workoutManager.currentRound), total: Double(workout.rounds))
+                                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                                .frame(width: 250)
+                                .scaleEffect(x: 1, y: 2, anchor: .center)
+                        }
                     }
                 }
 

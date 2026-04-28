@@ -18,6 +18,7 @@ struct WorkoutSetupView: View {
     
     // Custom mode
     @State private var customIntervals: [CustomInterval] = []
+    @State private var repeatCount = 1
     
     @State private var saveAsPreset = false
     
@@ -113,31 +114,31 @@ struct WorkoutSetupView: View {
     }
     
     var customSetupView: some View {
-        VStack(spacing: 15) {
-            Text("Custom intervals coming in advanced version")
-                .foregroundColor(.secondary)
-                .padding()
-            
-            Text("For now, use Simple mode to set up work/rest intervals")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-        }
+        CustomIntervalEditor(intervals: $customIntervals, repeatCount: $repeatCount)
     }
     
     func startWorkout() {
-        let warmupTime = warmupMinutes * 60 + warmupSeconds
-        let workTime = workMinutes * 60 + workSeconds
-        let restTime = restMinutes * 60 + restSeconds
-
-        let workout = Workout(
-            name: workoutName.isEmpty ? "HIIT Workout" : workoutName,
-            warmupDuration: warmupTime,
-            workDuration: workTime,
-            restDuration: restTime,
-            rounds: rounds
-        )
+        let workout: Workout
+        
+        if setupMode == .custom {
+            guard !customIntervals.isEmpty else { return }
+            workout = Workout(
+                name: workoutName.isEmpty ? "Custom Workout" : workoutName,
+                customIntervals: customIntervals,
+                repeatCount: repeatCount
+            )
+        } else {
+            let warmupTime = warmupMinutes * 60 + warmupSeconds
+            let workTime = workMinutes * 60 + workSeconds
+            let restTime = restMinutes * 60 + restSeconds
+            workout = Workout(
+                name: workoutName.isEmpty ? "HIIT Workout" : workoutName,
+                warmupDuration: warmupTime,
+                workDuration: workTime,
+                restDuration: restTime,
+                rounds: rounds
+            )
+        }
         
         if saveAsPreset && !workoutName.isEmpty {
             workoutManager.savePreset(workout)
@@ -181,14 +182,283 @@ struct DurationPicker: View {
     }
 }
 
-struct CustomInterval: Identifiable {
-    let id = UUID()
-    var name: String
-    var duration: Int
-    var type: IntervalType
-    
-    enum IntervalType {
-        case work
-        case rest
+// MARK: - Custom Interval Editor
+
+enum IntervalTemplate: String, CaseIterable {
+    case work, rest, warmup, cooldown
+
+    var label: String {
+        switch self {
+        case .work: return "Work"
+        case .rest: return "Rest"
+        case .warmup: return "Warm Up"
+        case .cooldown: return "Cool Down"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .work: return "flame.fill"
+        case .rest: return "pause.circle.fill"
+        case .warmup: return "figure.walk"
+        case .cooldown: return "wind"
+        }
+    }
+
+    var defaultColor: IntervalColor {
+        switch self {
+        case .work: return .fieryRed
+        case .rest: return .blue
+        case .warmup: return .orange
+        case .cooldown: return .green
+        }
+    }
+
+    var defaultDuration: Int {
+        switch self {
+        case .work: return 45
+        case .rest: return 15
+        case .warmup: return 30
+        case .cooldown: return 60
+        }
+    }
+
+    func toInterval() -> CustomInterval {
+        CustomInterval(label: label, duration: defaultDuration, color: defaultColor)
     }
 }
+
+struct CustomIntervalEditor: View {
+    @Binding var intervals: [CustomInterval]
+    @Binding var repeatCount: Int
+
+    var totalSeconds: Int {
+        intervals.reduce(0) { $0 + $1.duration } * max(repeatCount, 1)
+    }
+
+    var body: some View {
+        VStack(spacing: 15) {
+            // Template buttons
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Add Interval")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                
+                HStack(spacing: 10) {
+                    ForEach(IntervalTemplate.allCases, id: \.self) { template in
+                        Button {
+                            withAnimation {
+                                intervals.append(template.toInterval())
+                            }
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: template.icon)
+                                    .font(.system(size: 18))
+                                Text(template.label)
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(template.defaultColor.swiftUIColor.opacity(0.85))
+                            .cornerRadius(10)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+
+            // Interval list
+            if intervals.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
+                    Text("Tap a button above to add intervals")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(height: 120)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(intervals.enumerated()), id: \.element.id) { index, _ in
+                        CustomIntervalRow(interval: $intervals[index], onDelete: {
+                            withAnimation {
+                                _ = intervals.remove(at: index)
+                            }
+                        }, onMoveUp: index > 0 ? {
+                            withAnimation {
+                                intervals.swapAt(index, index - 1)
+                            }
+                        } : nil, onMoveDown: index < intervals.count - 1 ? {
+                            withAnimation {
+                                intervals.swapAt(index, index + 1)
+                            }
+                        } : nil)
+                        
+                        if index < intervals.count - 1 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+                }
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            // Repeat stepper
+            GroupBox(label: Label("Repeat", systemImage: "repeat")) {
+                Stepper("\(repeatCount)x", value: $repeatCount, in: 1...50)
+                    .padding(.horizontal)
+            }
+            .padding(.horizontal)
+
+            // Total time summary
+            if !intervals.isEmpty {
+                HStack {
+                    Text("Total time:")
+                        .foregroundColor(.secondary)
+                    Text(formatTotalTime(totalSeconds))
+                        .fontWeight(.semibold)
+                }
+                .font(.subheadline)
+            }
+        }
+    }
+
+    func formatTotalTime(_ seconds: Int) -> String {
+        let mins = seconds / 60
+        let secs = seconds % 60
+        if mins == 0 {
+            return "\(secs)s"
+        } else if secs == 0 {
+            return "\(mins)m"
+        } else {
+            return "\(mins)m \(secs)s"
+        }
+    }
+}
+
+struct CustomIntervalRow: View {
+    @Binding var interval: CustomInterval
+    let onDelete: () -> Void
+    let onMoveUp: (() -> Void)?
+    let onMoveDown: (() -> Void)?
+
+    @State private var showColorPicker = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                // Color swatch (tap to expand picker)
+                Button {
+                    withAnimation { showColorPicker.toggle() }
+                } label: {
+                    Circle()
+                        .fill(interval.color.swiftUIColor)
+                        .frame(width: 28, height: 28)
+                        .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 1))
+                }
+
+                // Label
+                TextField("Label", text: $interval.label)
+                    .font(.body)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(maxWidth: .infinity)
+
+                // Duration steppers
+                HStack(spacing: 4) {
+                    Text(formatDuration(interval.duration))
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 52, alignment: .trailing)
+
+                    VStack(spacing: 0) {
+                        Button { adjustDuration(by: 5) } label: {
+                            Image(systemName: "chevron.up")
+                                .font(.caption2)
+                                .frame(width: 28, height: 18)
+                        }
+                        Button { adjustDuration(by: -5) } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .frame(width: 28, height: 18)
+                        }
+                    }
+                    .foregroundColor(.primary)
+                }
+
+                // Reorder / delete
+                VStack(spacing: 2) {
+                    if let onMoveUp {
+                        Button { onMoveUp() } label: {
+                            Image(systemName: "arrow.up")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    if let onMoveDown {
+                        Button { onMoveDown() } label: {
+                            Image(systemName: "arrow.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .frame(width: 20)
+
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red.opacity(0.7))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            if showColorPicker {
+                ColorSwatchPicker(selection: $interval.color)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
+        }
+    }
+
+    func adjustDuration(by amount: Int) {
+        let newValue = max(1, interval.duration + amount)
+        interval.duration = min(newValue, 3599)
+    }
+
+    func formatDuration(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
+struct ColorSwatchPicker: View {
+    @Binding var selection: IntervalColor
+
+    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 8)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(IntervalColor.allCases) { color in
+                Circle()
+                    .fill(color.swiftUIColor)
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        Circle().stroke(Color.white, lineWidth: selection == color ? 3 : 0)
+                    )
+                    .overlay(
+                        selection == color ?
+                            Image(systemName: "checkmark")
+                                .font(.caption2.bold())
+                                .foregroundColor(.white) : nil
+                    )
+                    .onTapGesture { selection = color }
+            }
+        }
+    }
+}
+
+
