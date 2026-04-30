@@ -2,11 +2,12 @@ import SwiftUI
 
 struct WorkoutSetupView: View {
     @ObservedObject var workoutManager: WorkoutManager
+    var prefillWorkout: Workout? = nil
     @Environment(\.dismiss) var dismiss
-    
+
     @State private var setupMode: SetupMode = .simple
     @State private var workoutName = ""
-    
+
     // Simple mode
     @State private var warmupMinutes = 0
     @State private var warmupSeconds = 30
@@ -15,10 +16,10 @@ struct WorkoutSetupView: View {
     @State private var restMinutes = 0
     @State private var restSeconds = 15
     @State private var rounds = 8
-    
+
     // Custom mode
     @State private var intervalGroups: [IntervalGroup] = []
-    
+
     @State private var saveAsPreset = false
     
     enum SetupMode {
@@ -63,13 +64,30 @@ struct WorkoutSetupView: View {
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("New Workout")
+            .navigationTitle(prefillWorkout != nil ? "Edit Workout" : "New Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                }
+            }
+            .onAppear {
+                guard let workout = prefillWorkout else { return }
+                workoutName = workout.name
+                if workout.isCustom {
+                    setupMode = .custom
+                    intervalGroups = workout.resolvedGroups ?? []
+                } else {
+                    setupMode = .simple
+                    warmupMinutes = workout.warmupDuration / 60
+                    warmupSeconds = workout.warmupDuration % 60
+                    workMinutes = workout.workDuration / 60
+                    workSeconds = workout.workDuration % 60
+                    restMinutes = workout.restDuration / 60
+                    restSeconds = workout.restDuration % 60
+                    rounds = workout.rounds
                 }
             }
         }

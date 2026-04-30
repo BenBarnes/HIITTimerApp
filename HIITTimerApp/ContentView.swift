@@ -4,6 +4,7 @@ struct ContentView: View {
     @StateObject private var workoutManager = WorkoutManager()
     @State private var showingPresets = false
     @State private var showingWorkoutSetup = false
+    @State private var showingLastWorkout = false
     
     var body: some View {
         NavigationStack {
@@ -31,11 +32,19 @@ struct ContentView: View {
                             }) {
                                 MenuButton(icon: "plus.circle.fill", text: "New Workout")
                             }
-                            
+
                             Button(action: {
                                 showingPresets = true
                             }) {
                                 MenuButton(icon: "list.bullet", text: "Load Preset")
+                            }
+
+                            if workoutManager.lastWorkout != nil {
+                                Button(action: {
+                                    showingLastWorkout = true
+                                }) {
+                                    MenuButton(icon: "arrow.counterclockwise", text: "Repeat Last")
+                                }
                             }
                         }
                         .padding()
@@ -47,6 +56,9 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingPresets) {
                 PresetsView(workoutManager: workoutManager)
+            }
+            .sheet(isPresented: $showingLastWorkout) {
+                WorkoutSetupView(workoutManager: workoutManager, prefillWorkout: workoutManager.lastWorkout)
             }
         }
     }

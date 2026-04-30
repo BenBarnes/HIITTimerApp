@@ -12,6 +12,7 @@ class WorkoutManager: ObservableObject {
     @Published var currentRound = 1
     @Published var remainingTime = 0
     @Published var presets: [Workout] = []
+    @Published var lastWorkout: Workout?
     @Published var currentIntervalIndex = 0
     @Published var totalIntervalCount = 0
     
@@ -59,6 +60,7 @@ class WorkoutManager: ObservableObject {
     
     init() {
         loadPresets()
+        loadLastWorkout()
         soundManager.setupAudioSession()
     }
     
@@ -68,6 +70,7 @@ class WorkoutManager: ObservableObject {
         isActive = true
         isPaused = false
         UIApplication.shared.isIdleTimerDisabled = true
+        saveLastWorkout(workout)
 
         if workout.isCustom, let groups = workout.resolvedGroups {
             expandedIntervals = groups.flatMap { group in
@@ -232,6 +235,20 @@ class WorkoutManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "workoutPresets"),
            let decoded = try? JSONDecoder().decode([Workout].self, from: data) {
             presets = decoded
+        }
+    }
+    
+    private func saveLastWorkout(_ workout: Workout) {
+        lastWorkout = workout
+        if let encoded = try? JSONEncoder().encode(workout) {
+            UserDefaults.standard.set(encoded, forKey: "lastWorkout")
+        }
+    }
+    
+    private func loadLastWorkout() {
+        if let data = UserDefaults.standard.data(forKey: "lastWorkout"),
+           let decoded = try? JSONDecoder().decode(Workout.self, from: data) {
+            lastWorkout = decoded
         }
     }
 }
