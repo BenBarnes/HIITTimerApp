@@ -82,32 +82,35 @@ struct PresetRow: View {
                     .foregroundColor(.gray)
             }
             
-            if preset.isCustom, let intervals = preset.customIntervals {
+            if preset.isCustom, let groups = preset.resolvedGroups {
+                let allIntervals = groups.flatMap { $0.intervals }
                 HStack(spacing: 4) {
-                    ForEach(intervals.prefix(8)) { interval in
+                    ForEach(allIntervals.prefix(8)) { interval in
                         Circle()
                             .fill(interval.color.swiftUIColor)
                             .frame(width: 10, height: 10)
                     }
-                    if intervals.count > 8 {
-                        Text("+\(intervals.count - 8)")
+                    if allIntervals.count > 8 {
+                        Text("+\(allIntervals.count - 8)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
                 
                 HStack(spacing: 15) {
-                    Label("\(intervals.count) intervals", systemImage: "list.number")
+                    Label("\(groups.count) groups", systemImage: "rectangle.stack")
                         .font(.caption)
                         .foregroundColor(.purple)
-                    if let rc = preset.repeatCount, rc > 1 {
-                        Label("\(rc)x repeat", systemImage: "repeat")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    let totalIntervals = groups.reduce(0) { $0 + $1.intervals.count * max($1.repeatCount, 1) }
+                    Label("\(totalIntervals) intervals", systemImage: "list.number")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
-                let totalSeconds = intervals.reduce(0) { $0 + $1.duration } * max(preset.repeatCount ?? 1, 1)
+                let totalSeconds = groups.reduce(0) { total, group in
+                    let groupTime = group.intervals.reduce(0) { $0 + $1.duration }
+                    return total + groupTime * max(group.repeatCount, 1)
+                }
                 Text("Total: \(formatTime(totalSeconds))")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -167,8 +170,7 @@ struct EditPresetView: View {
     @State private var restSeconds = 0
     @State private var rounds = 1
     // Custom mode state
-    @State private var customIntervals: [CustomInterval] = []
-    @State private var repeatCount = 1
+    @State private var intervalGroups: [IntervalGroup] = []
     
     var body: some View {
         NavigationStack {
@@ -190,7 +192,7 @@ struct EditPresetView: View {
                         .padding(.top)
                         
                         if preset.isCustom {
-                            CustomIntervalEditor(intervals: $customIntervals, repeatCount: $repeatCount)
+                            GroupedIntervalEditor(groups: $intervalGroups)
                         } else {
                             DurationPicker(label: "Warm-up", icon: "figure.walk", minutes: $warmupMinutes, seconds: $warmupSeconds)
                             DurationPicker(label: "Work Interval", icon: "flame.fill", minutes: $workMinutes, seconds: $workSeconds)
@@ -231,8 +233,7 @@ struct EditPresetView: View {
     func loadPresetData() {
         workoutName = preset.name
         if preset.isCustom {
-            customIntervals = preset.customIntervals ?? []
-            repeatCount = preset.repeatCount ?? 1
+            intervalGroups = preset.resolvedGroups ?? []
         } else {
             warmupMinutes = preset.warmupDuration / 60
             warmupSeconds = preset.warmupDuration % 60
@@ -250,8 +251,7 @@ struct EditPresetView: View {
             updatedWorkout = Workout(
                 id: preset.id,
                 name: workoutName,
-                customIntervals: customIntervals,
-                repeatCount: repeatCount
+                intervalGroups: intervalGroups.filter { !$0.intervals.isEmpty }
             )
         } else {
             let warmupTime = warmupMinutes * 60 + warmupSeconds

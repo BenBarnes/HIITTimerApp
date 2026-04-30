@@ -69,10 +69,10 @@ class WorkoutManager: ObservableObject {
         isPaused = false
         UIApplication.shared.isIdleTimerDisabled = true
 
-        if workout.isCustom {
-            let intervals = workout.customIntervals!
-            let repeats = max(workout.repeatCount ?? 1, 1)
-            expandedIntervals = (0..<repeats).flatMap { _ in intervals }
+        if workout.isCustom, let groups = workout.resolvedGroups {
+            expandedIntervals = groups.flatMap { group in
+                (0..<max(group.repeatCount, 1)).flatMap { _ in group.intervals }
+            }
             totalIntervalCount = expandedIntervals.count
             currentIntervalIndex = 0
             let first = expandedIntervals[0]
@@ -288,6 +288,18 @@ struct CustomInterval: Identifiable, Codable, Equatable {
     }
 }
 
+struct IntervalGroup: Identifiable, Codable, Equatable {
+    let id: UUID
+    var intervals: [CustomInterval]
+    var repeatCount: Int
+
+    init(id: UUID = UUID(), intervals: [CustomInterval] = [], repeatCount: Int = 1) {
+        self.id = id
+        self.intervals = intervals
+        self.repeatCount = repeatCount
+    }
+}
+
 struct Workout: Identifiable, Codable {
     let id: UUID
     var name: String
@@ -297,8 +309,27 @@ struct Workout: Identifiable, Codable {
     var rounds: Int
     var customIntervals: [CustomInterval]?
     var repeatCount: Int?
+    var intervalGroups: [IntervalGroup]?
 
-    var isCustom: Bool { customIntervals != nil && !(customIntervals!.isEmpty) }
+    var isCustom: Bool {
+        if let groups = intervalGroups, groups.contains(where: { !$0.intervals.isEmpty }) {
+            return true
+        }
+        if let intervals = customIntervals, !intervals.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    var resolvedGroups: [IntervalGroup]? {
+        if let groups = intervalGroups, groups.contains(where: { !$0.intervals.isEmpty }) {
+            return groups
+        }
+        if let intervals = customIntervals, !intervals.isEmpty {
+            return [IntervalGroup(intervals: intervals, repeatCount: repeatCount ?? 1)]
+        }
+        return nil
+    }
 
     init(id: UUID = UUID(), name: String, warmupDuration: Int, workDuration: Int, restDuration: Int, rounds: Int) {
         self.id = id
@@ -309,15 +340,14 @@ struct Workout: Identifiable, Codable {
         self.rounds = rounds
     }
 
-    init(id: UUID = UUID(), name: String, customIntervals: [CustomInterval], repeatCount: Int = 1) {
+    init(id: UUID = UUID(), name: String, intervalGroups: [IntervalGroup]) {
         self.id = id
         self.name = name
         self.warmupDuration = 0
         self.workDuration = 0
         self.restDuration = 0
         self.rounds = 1
-        self.customIntervals = customIntervals
-        self.repeatCount = repeatCount
+        self.intervalGroups = intervalGroups
     }
 }
 

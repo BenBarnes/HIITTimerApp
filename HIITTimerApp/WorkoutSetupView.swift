@@ -17,8 +17,7 @@ struct WorkoutSetupView: View {
     @State private var rounds = 8
     
     // Custom mode
-    @State private var customIntervals: [CustomInterval] = []
-    @State private var repeatCount = 1
+    @State private var intervalGroups: [IntervalGroup] = []
     
     @State private var saveAsPreset = false
     
@@ -114,18 +113,18 @@ struct WorkoutSetupView: View {
     }
     
     var customSetupView: some View {
-        CustomIntervalEditor(intervals: $customIntervals, repeatCount: $repeatCount)
+        GroupedIntervalEditor(groups: $intervalGroups)
     }
     
     func startWorkout() {
         let workout: Workout
         
         if setupMode == .custom {
-            guard !customIntervals.isEmpty else { return }
+            let nonEmpty = intervalGroups.filter { !$0.intervals.isEmpty }
+            guard !nonEmpty.isEmpty else { return }
             workout = Workout(
                 name: workoutName.isEmpty ? "Custom Workout" : workoutName,
-                customIntervals: customIntervals,
-                repeatCount: repeatCount
+                intervalGroups: nonEmpty
             )
         } else {
             let warmupTime = warmupMinutes * 60 + warmupSeconds
@@ -228,94 +227,60 @@ enum IntervalTemplate: String, CaseIterable {
     }
 }
 
-struct CustomIntervalEditor: View {
-    @Binding var intervals: [CustomInterval]
-    @Binding var repeatCount: Int
+struct GroupedIntervalEditor: View {
+    @Binding var groups: [IntervalGroup]
 
     var totalSeconds: Int {
-        intervals.reduce(0) { $0 + $1.duration } * max(repeatCount, 1)
+        groups.reduce(0) { total, group in
+            let groupTime = group.intervals.reduce(0) { $0 + $1.duration }
+            return total + groupTime * max(group.repeatCount, 1)
+        }
     }
 
     var body: some View {
         VStack(spacing: 15) {
-            // Template buttons
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Add Interval")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-                
-                HStack(spacing: 10) {
-                    ForEach(IntervalTemplate.allCases, id: \.self) { template in
-                        Button {
-                            withAnimation {
-                                intervals.append(template.toInterval())
-                            }
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: template.icon)
-                                    .font(.system(size: 18))
-                                Text(template.label)
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .background(template.defaultColor.swiftUIColor.opacity(0.85))
-                            .cornerRadius(10)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            // Interval list
-            if intervals.isEmpty {
+            if groups.isEmpty {
                 VStack(spacing: 10) {
-                    Image(systemName: "list.bullet.rectangle")
+                    Image(systemName: "rectangle.stack.badge.plus")
                         .font(.system(size: 40))
                         .foregroundColor(.gray)
-                    Text("Tap a button above to add intervals")
+                    Text("Add a group to get started")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 .frame(height: 120)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(intervals.enumerated()), id: \.element.id) { index, _ in
-                        CustomIntervalRow(interval: $intervals[index], onDelete: {
-                            withAnimation {
-                                _ = intervals.remove(at: index)
-                            }
-                        }, onMoveUp: index > 0 ? {
-                            withAnimation {
-                                intervals.swapAt(index, index - 1)
-                            }
-                        } : nil, onMoveDown: index < intervals.count - 1 ? {
-                            withAnimation {
-                                intervals.swapAt(index, index + 1)
-                            }
-                        } : nil)
-                        
-                        if index < intervals.count - 1 {
-                            Divider().padding(.horizontal)
-                        }
-                    }
+                ForEach(Array(groups.enumerated()), id: \.element.id) { index, _ in
+                    IntervalGroupCard(
+                        group: $groups[index],
+                        groupIndex: index,
+                        totalGroups: groups.count,
+                        onDelete: {
+                            withAnimation { _ = groups.remove(at: index) }
+                        },
+                        onMoveUp: index > 0 ? {
+                            withAnimation { groups.swapAt(index, index - 1) }
+                        } : nil,
+                        onMoveDown: index < groups.count - 1 ? {
+                            withAnimation { groups.swapAt(index, index + 1) }
+                        } : nil
+                    )
                 }
-                .background(Color(UIColor.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-                .padding(.horizontal)
             }
 
-            // Repeat stepper
-            GroupBox(label: Label("Repeat", systemImage: "repeat")) {
-                Stepper("\(repeatCount)x", value: $repeatCount, in: 1...50)
-                    .padding(.horizontal)
+            Button {
+                withAnimation { groups.append(IntervalGroup()) }
+            } label: {
+                Label("Add Group", systemImage: "plus.rectangle.on.rectangle")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .cornerRadius(10)
             }
             .padding(.horizontal)
 
-            // Total time summary
-            if !intervals.isEmpty {
+            if totalSeconds > 0 {
                 HStack {
                     Text("Total time:")
                         .foregroundColor(.secondary)
@@ -330,13 +295,115 @@ struct CustomIntervalEditor: View {
     func formatTotalTime(_ seconds: Int) -> String {
         let mins = seconds / 60
         let secs = seconds % 60
-        if mins == 0 {
-            return "\(secs)s"
-        } else if secs == 0 {
-            return "\(mins)m"
-        } else {
-            return "\(mins)m \(secs)s"
+        if mins == 0 { return "\(secs)s" }
+        if secs == 0 { return "\(mins)m" }
+        return "\(mins)m \(secs)s"
+    }
+}
+
+struct IntervalGroupCard: View {
+    @Binding var group: IntervalGroup
+    let groupIndex: Int
+    let totalGroups: Int
+    let onDelete: () -> Void
+    let onMoveUp: (() -> Void)?
+    let onMoveDown: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Group header
+            HStack {
+                Text("Group \(groupIndex + 1)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                if let onMoveUp {
+                    Button { onMoveUp() } label: {
+                        Image(systemName: "arrow.up").font(.caption)
+                    }
+                }
+                if let onMoveDown {
+                    Button { onMoveDown() } label: {
+                        Image(systemName: "arrow.down").font(.caption)
+                    }
+                }
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(UIColor.tertiarySystemGroupedBackground))
+
+            Divider()
+
+            // Template buttons
+            HStack(spacing: 6) {
+                ForEach(IntervalTemplate.allCases, id: \.self) { template in
+                    Button {
+                        withAnimation { group.intervals.append(template.toInterval()) }
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: template.icon).font(.system(size: 14))
+                            Text(template.label).font(.caption2)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(template.defaultColor.swiftUIColor.opacity(0.85))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+
+            // Interval rows
+            if !group.intervals.isEmpty {
+                Divider()
+                VStack(spacing: 0) {
+                    ForEach(Array(group.intervals.enumerated()), id: \.element.id) { index, _ in
+                        CustomIntervalRow(
+                            interval: $group.intervals[index],
+                            onDelete: {
+                                withAnimation { _ = group.intervals.remove(at: index) }
+                            },
+                            onMoveUp: index > 0 ? {
+                                withAnimation { group.intervals.swapAt(index, index - 1) }
+                            } : nil,
+                            onMoveDown: index < group.intervals.count - 1 ? {
+                                withAnimation { group.intervals.swapAt(index, index + 1) }
+                            } : nil
+                        )
+                        if index < group.intervals.count - 1 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            // Repeat stepper
+            HStack {
+                Image(systemName: "repeat")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Stepper("Repeat \(group.repeatCount)x", value: $group.repeatCount, in: 1...50)
+                    .font(.subheadline)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+        )
+        .padding(.horizontal)
     }
 }
 
