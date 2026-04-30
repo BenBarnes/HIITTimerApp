@@ -144,6 +144,7 @@ class WorkoutManager: ObservableObject {
                 // Check BEFORE decrementing
                 if self.remainingTime == 3 || self.remainingTime == 2 || self.remainingTime == 1 {
                     self.soundManager.playCountdownBeep()
+                    if self.remainingTime == 3 { self.soundManager.prepareHaptic() }
                 }
                 
                 self.remainingTime -= 1
@@ -329,13 +330,7 @@ struct Workout: Identifiable, Codable {
     var intervalGroups: [IntervalGroup]?
 
     var isCustom: Bool {
-        if let groups = intervalGroups, groups.contains(where: { !$0.intervals.isEmpty }) {
-            return true
-        }
-        if let intervals = customIntervals, !intervals.isEmpty {
-            return true
-        }
-        return false
+        resolvedGroups != nil
     }
 
     var resolvedGroups: [IntervalGroup]? {
@@ -418,8 +413,21 @@ class SoundManager {
         }
     }
     
+    private let hapticGenerator = UINotificationFeedbackGenerator()
+
     func triggerHaptic(style: UINotificationFeedbackGenerator.FeedbackType = .warning) {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(style)
+        hapticGenerator.notificationOccurred(style)
     }
+
+    func prepareHaptic() {
+        hapticGenerator.prepare()
+    }
+}
+
+func formatTime(_ seconds: Int) -> String {
+    let mins = seconds / 60
+    let secs = seconds % 60
+    if mins == 0 { return "\(secs)s" }
+    if secs == 0 { return "\(mins)m" }
+    return "\(mins)m \(secs)s"
 }

@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkoutSetupView: View {
     @ObservedObject var workoutManager: WorkoutManager
     var prefillWorkout: Workout? = nil
+    var editingPreset: Workout? = nil
     @Environment(\.dismiss) var dismiss
 
     @State private var setupMode: SetupMode = .simple
@@ -35,36 +36,46 @@ struct WorkoutSetupView: View {
                 
                 ScrollView {
                     VStack(spacing: 25) {
-                        // Mode selector
-                        Picker("Setup Mode", selection: $setupMode) {
-                            Text("Simple").tag(SetupMode.simple)
-                            Text("Custom").tag(SetupMode.custom)
+                        if editingPreset != nil {
+                            TextField("Workout Name", text: $workoutName)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .padding(.horizontal)
                         }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-                        
+
+                        if editingPreset == nil {
+                            Picker("Setup Mode", selection: $setupMode) {
+                                Text("Simple").tag(SetupMode.simple)
+                                Text("Custom").tag(SetupMode.custom)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .padding(.horizontal)
+                        }
+
                         if setupMode == .simple {
                             simpleSetupView
                         } else {
                             customSetupView
                         }
 
-                        // Save as preset option
-                        Toggle("Save as Preset", isOn: $saveAsPreset)
-                            .padding(.horizontal)
-                        
-                        if saveAsPreset {
-                            TextField("Workout Name", text: $workoutName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                        if editingPreset != nil {
+                            savePresetButton
+                        } else {
+                            Toggle("Save as Preset", isOn: $saveAsPreset)
                                 .padding(.horizontal)
+
+                            if saveAsPreset {
+                                TextField("Workout Name", text: $workoutName)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .padding(.horizontal)
+                            }
+
+                            startButton
                         }
-                        
-                        startButton
                     }
                     .padding(.vertical)
                 }
             }
-            .navigationTitle(prefillWorkout != nil ? "Edit Workout" : "New Workout")
+            .navigationTitle(editingPreset != nil ? "Edit Preset" : prefillWorkout != nil ? "Edit Workout" : "New Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -74,7 +85,7 @@ struct WorkoutSetupView: View {
                 }
             }
             .onAppear {
-                guard let workout = prefillWorkout else { return }
+                guard let workout = editingPreset ?? prefillWorkout else { return }
                 workoutName = workout.name
                 if workout.isCustom {
                     setupMode = .custom
@@ -130,10 +141,56 @@ struct WorkoutSetupView: View {
         .padding(.top, 10)
     }
     
+    var savePresetButton: some View {
+        Button(action: savePreset) {
+            Text("Save Changes")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 55)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(15)
+        }
+        .padding(.horizontal)
+        .padding(.top, 10)
+    }
+
     var customSetupView: some View {
         GroupedIntervalEditor(groups: $intervalGroups)
     }
-    
+
+    func savePreset() {
+        guard let preset = editingPreset else { return }
+        let updatedWorkout: Workout
+        if setupMode == .custom {
+            updatedWorkout = Workout(
+                id: preset.id,
+                name: workoutName.isEmpty ? preset.name : workoutName,
+                intervalGroups: intervalGroups.filter { !$0.intervals.isEmpty }
+            )
+        } else {
+            let warmupTime = warmupMinutes * 60 + warmupSeconds
+            let workTime = workMinutes * 60 + workSeconds
+            let restTime = restMinutes * 60 + restSeconds
+            updatedWorkout = Workout(
+                id: preset.id,
+                name: workoutName.isEmpty ? preset.name : workoutName,
+                warmupDuration: warmupTime,
+                workDuration: workTime,
+                restDuration: restTime,
+                rounds: rounds
+            )
+        }
+        workoutManager.savePreset(updatedWorkout)
+        dismiss()
+    }
+
     func startWorkout() {
         let workout: Workout
         
@@ -302,20 +359,12 @@ struct GroupedIntervalEditor: View {
                 HStack {
                     Text("Total time:")
                         .foregroundColor(.secondary)
-                    Text(formatTotalTime(totalSeconds))
+                    Text(formatTime(totalSeconds))
                         .fontWeight(.semibold)
                 }
                 .font(.subheadline)
             }
         }
-    }
-
-    func formatTotalTime(_ seconds: Int) -> String {
-        let mins = seconds / 60
-        let secs = seconds % 60
-        if mins == 0 { return "\(secs)s" }
-        if secs == 0 { return "\(mins)m" }
-        return "\(mins)m \(secs)s"
     }
 }
 
