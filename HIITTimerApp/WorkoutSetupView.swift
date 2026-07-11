@@ -22,6 +22,7 @@ struct WorkoutSetupView: View {
     @State private var intervalGroups: [IntervalGroup] = []
 
     @State private var saveAsPreset = false
+    @FocusState private var nameFieldFocused: Bool
     
     enum SetupMode {
         case simple
@@ -67,6 +68,10 @@ struct WorkoutSetupView: View {
                                 TextField("Workout Name", text: $workoutName)
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
                                     .padding(.horizontal)
+                                    .focused($nameFieldFocused)
+                                    // Request the keyboard as soon as the field
+                                    // appears so it isn't waiting on a second tap.
+                                    .onAppear { nameFieldFocused = true }
                             }
 
                             startButton

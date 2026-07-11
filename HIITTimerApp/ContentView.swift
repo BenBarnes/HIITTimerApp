@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var workoutManager = WorkoutManager()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingPresets = false
     @State private var showingWorkoutSetup = false
     @State private var showingLastWorkout = false
@@ -59,6 +60,13 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingLastWorkout) {
                 WorkoutSetupView(workoutManager: workoutManager, prefillWorkout: workoutManager.lastWorkout)
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Re-sync the countdown when returning to the app so the timer
+            // keeps up with real elapsed time.
+            if newPhase == .active {
+                workoutManager.syncOnForeground()
             }
         }
     }

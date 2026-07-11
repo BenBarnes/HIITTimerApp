@@ -17,6 +17,11 @@ class WorkoutManager: ObservableObject {
     @Published var totalIntervalCount = 0
     
     private var timer: Timer?
+    // Wall-clock time at which the current phase ends. Driving the countdown
+    // from a target date (instead of decrementing a counter) keeps phase
+    // durations exact, avoids timer drift, and lets the timer catch up when
+    // the app returns to the foreground. Nil whenever the timer isn't running.
+    private var phaseEndDate: Date?
     private var expandedIntervals: [CustomInterval] = []
     private let soundManager = SoundManager.shared
     
@@ -79,16 +84,13 @@ class WorkoutManager: ObservableObject {
             totalIntervalCount = expandedIntervals.count
             currentIntervalIndex = 0
             let first = expandedIntervals[0]
-            currentPhase = .customInterval(index: 0)
-            remainingTime = first.duration
+            startPhase(.customInterval(index: 0), duration: first.duration)
             soundManager.playIntervalChime()
         } else {
             if workout.warmupDuration > 0 {
-                currentPhase = .warmup
-                remainingTime = workout.warmupDuration
+                startPhase(.warmup, duration: workout.warmupDuration)
             } else {
-                currentPhase = .work
-                remainingTime = workout.workDuration
+                startPhase(.work, duration: workout.workDuration)
             }
             soundManager.playIntervalChime()
         }
@@ -98,6 +100,12 @@ class WorkoutManager: ObservableObject {
     
     func pause() {
         isPaused = true
+
+        // Freeze the remaining time so it can be resumed from exactly here.
+        if let end = phaseEndDate {
+            remainingTime = max(0, Int(end.timeIntervalSinceNow.rounded(.up)))
+        }
+        phaseEndDate = nil
         timer?.invalidate()
         timer = nil
 
@@ -108,6 +116,9 @@ class WorkoutManager: ObservableObject {
     func resume() {
         isPaused = false
 
+        // Recompute the end date from the frozen remaining time.
+        phaseEndDate = Date().addingTimeInterval(TimeInterval(remainingTime))
+
         // Prevent screen from locking when workout resumes
         UIApplication.shared.isIdleTimerDisabled = true
 
@@ -117,6 +128,7 @@ class WorkoutManager: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        phaseEndDate = nil
         isActive = false
         isPaused = false
         isCompleted = false
@@ -131,26 +143,54 @@ class WorkoutManager: ObservableObject {
     }
     
     func skipPhase() {
-        remainingTime = 0
         advancePhase()
     }
-    
+
+    /// Re-syncs the countdown when the app returns to the foreground. The timer
+    /// is suspended by the system while backgrounded, so we re-evaluate elapsed
+    /// time and restart ticking unless the workout is paused.
+    func syncOnForeground() {
+        guard isActive, !isPaused else { return }
+        if timer == nil {
+            startTimer()
+        }
+        tick()
+    }
+
+    /// Configures the current phase and its target end date in one place.
+    private func startPhase(_ phase: WorkoutPhase, duration: Int) {
+        currentPhase = phase
+        remainingTime = duration
+        phaseEndDate = Date().addingTimeInterval(TimeInterval(duration))
+    }
+
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            if self.remainingTime > 0 {
-                // Play countdown beeps at exactly 3, 2, and 1 seconds remaining
-                // Check BEFORE decrementing
-                if self.remainingTime == 3 || self.remainingTime == 2 || self.remainingTime == 1 {
-                    self.soundManager.playCountdownBeep()
-                    if self.remainingTime == 3 { self.soundManager.prepareHaptic() }
-                }
-                
-                self.remainingTime -= 1
-            } else {
-                self.advancePhase()
-            }
+        timer?.invalidate()
+        // Fire several times a second so the display and phase transitions stay
+        // responsive; the actual timing comes from phaseEndDate.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+    }
+
+    private func tick() {
+        guard let end = phaseEndDate else { return }
+
+        let timeLeft = end.timeIntervalSinceNow
+        let newRemaining = max(0, Int(timeLeft.rounded(.up)))
+
+        // Play countdown beeps as we cross into 3, 2 and 1 seconds remaining.
+        if newRemaining < remainingTime && (1...3).contains(newRemaining) {
+            soundManager.playCountdownBeep()
+            if newRemaining == 3 { soundManager.prepareHaptic() }
+        }
+
+        if newRemaining != remainingTime {
+            remainingTime = newRemaining
+        }
+
+        if timeLeft <= 0 {
+            advancePhase()
         }
     }
     
@@ -159,15 +199,13 @@ class WorkoutManager: ObservableObject {
         
         switch currentPhase {
         case .warmup:
-            currentPhase = .work
-            remainingTime = workout.workDuration
+            startPhase(.work, duration: workout.workDuration)
             soundManager.playIntervalChime()
             soundManager.triggerHaptic()
             
         case .work:
             if currentRound < workout.rounds {
-                currentPhase = .rest
-                remainingTime = workout.restDuration
+                startPhase(.rest, duration: workout.restDuration)
                 soundManager.playIntervalChime()
                 soundManager.triggerHaptic()
             } else {
@@ -176,8 +214,7 @@ class WorkoutManager: ObservableObject {
             
         case .rest:
             currentRound += 1
-            currentPhase = .work
-            remainingTime = workout.workDuration
+            startPhase(.work, duration: workout.workDuration)
             soundManager.playIntervalChime()
             soundManager.triggerHaptic()
 
@@ -186,8 +223,7 @@ class WorkoutManager: ObservableObject {
             if nextIndex < expandedIntervals.count {
                 currentIntervalIndex = nextIndex
                 let next = expandedIntervals[nextIndex]
-                currentPhase = .customInterval(index: nextIndex)
-                remainingTime = next.duration
+                startPhase(.customInterval(index: nextIndex), duration: next.duration)
                 soundManager.playIntervalChime()
                 soundManager.triggerHaptic()
             } else {
@@ -202,6 +238,7 @@ class WorkoutManager: ObservableObject {
     private func completeWorkout() {
         currentPhase = .complete
         remainingTime = 0
+        phaseEndDate = nil
         timer?.invalidate()
         timer = nil
         isCompleted = true
@@ -374,8 +411,10 @@ class SoundManager {
     func setupAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            // Use .playback category to bypass silent switch
-            try audioSession.setCategory(.playback, mode: .default, options: [])
+            // Use .playback so sounds bypass the silent switch, and .mixWithOthers
+            // so the user's background audio (music, podcasts) keeps playing while
+            // our beeps and chimes play over the top.
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try audioSession.setActive(true)
             loadAudioFiles()
         } catch {}
