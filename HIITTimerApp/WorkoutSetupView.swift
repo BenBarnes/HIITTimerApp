@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WorkoutSetupView: View {
-    @ObservedObject var workoutManager: WorkoutManager
+    var workoutManager: WorkoutManager
     var prefillWorkout: Workout? = nil
     var editingPreset: Workout? = nil
     @Environment(\.dismiss) var dismiss
@@ -39,7 +39,7 @@ struct WorkoutSetupView: View {
                     VStack(spacing: 25) {
                         if editingPreset != nil {
                             TextField("Workout Name", text: $workoutName)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .textFieldStyle(.roundedBorder)
                                 .padding(.horizontal)
                         }
 
@@ -48,7 +48,7 @@ struct WorkoutSetupView: View {
                                 Text("Simple").tag(SetupMode.simple)
                                 Text("Custom").tag(SetupMode.custom)
                             }
-                            .pickerStyle(SegmentedPickerStyle())
+                            .pickerStyle(.segmented)
                             .padding(.horizontal)
                         }
 
@@ -66,7 +66,7 @@ struct WorkoutSetupView: View {
 
                             if saveAsPreset {
                                 TextField("Workout Name", text: $workoutName)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .textFieldStyle(.roundedBorder)
                                     .padding(.horizontal)
                                     .focused($nameFieldFocused)
                                     // Request the keyboard as soon as the field
@@ -242,16 +242,16 @@ struct DurationPicker: View {
                         Text("\(i)").tag(i)
                     }
                 }
-                .pickerStyle(WheelPickerStyle())
+                .pickerStyle(.wheel)
                 .frame(width: 80)
                 Text("min")
-                
+
                 Picker("Seconds", selection: $seconds) {
                     ForEach(0..<60, id: \.self) { i in
                         Text("\(i)").tag(i)
                     }
                 }
-                .pickerStyle(WheelPickerStyle())
+                .pickerStyle(.wheel)
                 .frame(width: 80)
                 Text("sec")
             }
@@ -503,7 +503,7 @@ struct CustomIntervalRow: View {
                 // Label
                 TextField("Label", text: $interval.label)
                     .font(.body)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: .infinity)
 
                 // Duration steppers

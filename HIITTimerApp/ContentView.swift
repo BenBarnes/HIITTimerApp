@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var workoutManager = WorkoutManager()
+    @State private var workoutManager = WorkoutManager()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingPresets = false
     @State private var showingWorkoutSetup = false
@@ -95,7 +95,7 @@ struct MenuButton: View {
 }
 
 struct WorkoutActiveView: View {
-    @ObservedObject var workoutManager: WorkoutManager
+    var workoutManager: WorkoutManager
 
     var body: some View {
         if workoutManager.isCompleted {
@@ -124,7 +124,8 @@ struct WorkoutActiveView: View {
                                 .font(.system(size: 24, weight: .medium))
                                 .foregroundColor(.white)
                             ProgressView(value: Double(workoutManager.currentIntervalIndex + 1), total: Double(workoutManager.totalIntervalCount))
-                                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                                .progressViewStyle(.linear)
+                                .tint(.white)
                                 .frame(width: 250)
                                 .scaleEffect(x: 1, y: 2, anchor: .center)
                         } else {
@@ -132,7 +133,8 @@ struct WorkoutActiveView: View {
                                 .font(.system(size: 24, weight: .medium))
                                 .foregroundColor(.white)
                             ProgressView(value: Double(workoutManager.currentRound), total: Double(workout.rounds))
-                                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                                .progressViewStyle(.linear)
+                                .tint(.white)
                                 .frame(width: 250)
                                 .scaleEffect(x: 1, y: 2, anchor: .center)
                         }
@@ -193,7 +195,7 @@ struct WorkoutActiveView: View {
 }
 
 struct WorkoutCompleteView: View {
-    @ObservedObject var workoutManager: WorkoutManager
+    var workoutManager: WorkoutManager
 
     var body: some View {
         VStack(spacing: 40) {

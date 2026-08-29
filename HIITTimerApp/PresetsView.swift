@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PresetsView: View {
-    @ObservedObject var workoutManager: WorkoutManager
+    var workoutManager: WorkoutManager
     @Environment(\.dismiss) var dismiss
     @State private var editingPreset: Workout?
     

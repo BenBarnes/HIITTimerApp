@@ -1,29 +1,30 @@
 import SwiftUI
-import Combine
 import AVFoundation
 import UIKit
+import Observation
 
-class WorkoutManager: ObservableObject {
-    @Published var isActive = false
-    @Published var isPaused = false
-    @Published var isCompleted = false
-    @Published var currentWorkout: Workout?
-    @Published var currentPhase: WorkoutPhase = .warmup
-    @Published var currentRound = 1
-    @Published var remainingTime = 0
-    @Published var presets: [Workout] = []
-    @Published var lastWorkout: Workout?
-    @Published var currentIntervalIndex = 0
-    @Published var totalIntervalCount = 0
-    
-    private var timer: Timer?
+@Observable
+class WorkoutManager {
+    var isActive = false
+    var isPaused = false
+    var isCompleted = false
+    var currentWorkout: Workout?
+    var currentPhase: WorkoutPhase = .warmup
+    var currentRound = 1
+    var remainingTime = 0
+    var presets: [Workout] = []
+    var lastWorkout: Workout?
+    var currentIntervalIndex = 0
+    var totalIntervalCount = 0
+
+    @ObservationIgnored private var timer: Timer?
     // Wall-clock time at which the current phase ends. Driving the countdown
     // from a target date (instead of decrementing a counter) keeps phase
     // durations exact, avoids timer drift, and lets the timer catch up when
     // the app returns to the foreground. Nil whenever the timer isn't running.
-    private var phaseEndDate: Date?
-    private var expandedIntervals: [CustomInterval] = []
-    private let soundManager = SoundManager.shared
+    @ObservationIgnored private var phaseEndDate: Date?
+    @ObservationIgnored private var expandedIntervals: [CustomInterval] = []
+    @ObservationIgnored private let soundManager = SoundManager.shared
     
     var timeString: String {
         let minutes = remainingTime / 60
@@ -144,6 +145,14 @@ class WorkoutManager: ObservableObject {
     
     func skipPhase() {
         advancePhase()
+
+        // If the workout was paused, advance to the next phase but stay paused:
+        // freeze its target date so it doesn't count down until the user resumes.
+        // remainingTime already holds the new phase's full duration, and no timer
+        // is running while paused.
+        if isPaused {
+            phaseEndDate = nil
+        }
     }
 
     /// Re-syncs the countdown when the app returns to the foreground. The timer
