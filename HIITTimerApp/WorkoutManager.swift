@@ -491,7 +491,12 @@ class SoundManager {
         // app doesn't set up audio output until a workout actually starts.
         if silencePlayer.engine == nil {
             keepAliveEngine.attach(silencePlayer)
-            keepAliveEngine.connect(silencePlayer, to: keepAliveEngine.mainMixerNode, format: nil)
+            do {
+                try keepAliveEngine.connectNode(silencePlayer, to: keepAliveEngine.mainMixerNode, format: nil)
+            } catch {
+                keepAliveEngine.detach(silencePlayer)
+                return
+            }
         }
 
         let format = silencePlayer.outputFormat(forBus: 0)
@@ -506,7 +511,7 @@ class SoundManager {
         do {
             try keepAliveEngine.start()
             silencePlayer.scheduleBuffer(buffer, at: nil, options: .loops)
-            silencePlayer.play()
+            try silencePlayer.playAudio()
         } catch {}
     }
 
@@ -530,12 +535,12 @@ class SoundManager {
     /// keep-alive continue for the rest of the workout.
     private func observeAudioEvents() {
         Task { [weak self] in
-            for await notification in NotificationCenter.default.notifications(
-                named: AVAudioSession.interruptionNotification,
+            // Posted when an interruption ends. Restart regardless of the
+            // system's recommendation: the workout timer depends on keep-alive.
+            for await _ in NotificationCenter.default.notifications(
+                named: AVAudioSession.resumptionRecommendationNotification,
                 object: AVAudioSession.sharedInstance()
             ) {
-                guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                      AVAudioSession.InterruptionType(rawValue: rawType) == .ended else { continue }
                 self?.restartKeepAliveIfNeeded()
             }
         }
