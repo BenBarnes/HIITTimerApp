@@ -96,6 +96,7 @@ class WorkoutManager {
             soundManager.playIntervalChime()
         }
 
+        soundManager.startKeepAlive()
         startTimer()
     }
     
@@ -110,6 +111,10 @@ class WorkoutManager {
         timer?.invalidate()
         timer = nil
 
+        // Nothing needs to run while paused, so let the system suspend us
+        // in the background instead of holding audio open.
+        soundManager.stopKeepAlive()
+
         // Allow screen to lock when paused
         UIApplication.shared.isIdleTimerDisabled = false
     }
@@ -123,6 +128,7 @@ class WorkoutManager {
         // Prevent screen from locking when workout resumes
         UIApplication.shared.isIdleTimerDisabled = true
 
+        soundManager.startKeepAlive()
         startTimer()
     }
     
@@ -140,6 +146,7 @@ class WorkoutManager {
         currentIntervalIndex = 0
         totalIntervalCount = 0
         expandedIntervals = []
+        soundManager.stopKeepAlive()
         UIApplication.shared.isIdleTimerDisabled = false
     }
     
@@ -167,10 +174,12 @@ class WorkoutManager {
     }
 
     /// Configures the current phase and its target end date in one place.
-    private func startPhase(_ phase: WorkoutPhase, duration: Int) {
+    /// `start` defaults to now; automatic transitions pass the previous
+    /// phase's end date so consecutive phases chain without drift.
+    private func startPhase(_ phase: WorkoutPhase, duration: Int, startingAt start: Date = Date()) {
         currentPhase = phase
         remainingTime = duration
-        phaseEndDate = Date().addingTimeInterval(TimeInterval(duration))
+        phaseEndDate = start.addingTimeInterval(TimeInterval(duration))
     }
 
     private func startTimer() {
@@ -183,10 +192,19 @@ class WorkoutManager {
     }
 
     private func tick() {
-        guard let end = phaseEndDate else { return }
+        let now = Date()
 
-        let timeLeft = end.timeIntervalSinceNow
-        let newRemaining = max(0, Int(timeLeft.rounded(.up)))
+        // Advance through every phase whose end date has passed. Normally that's
+        // at most one, but if ticks were delayed (e.g. the app was suspended)
+        // several may have elapsed. Each new phase starts exactly when the
+        // previous one ended so no time is lost, and cues only play for
+        // transitions happening now rather than stale ones being caught up.
+        while let end = phaseEndDate, end <= now {
+            advancePhase(startingAt: end, playCues: now.timeIntervalSince(end) < 1)
+        }
+
+        guard let end = phaseEndDate else { return }
+        let newRemaining = max(0, Int(end.timeIntervalSince(now).rounded(.up)))
 
         // Play countdown beeps as we cross into 3, 2 and 1 seconds remaining.
         if newRemaining < remainingTime && (1...3).contains(newRemaining) {
@@ -197,63 +215,62 @@ class WorkoutManager {
         if newRemaining != remainingTime {
             remainingTime = newRemaining
         }
-
-        if timeLeft <= 0 {
-            advancePhase()
-        }
     }
     
-    private func advancePhase() {
+    private func advancePhase(startingAt start: Date = Date(), playCues: Bool = true) {
         guard let workout = currentWorkout else { return }
         
         switch currentPhase {
         case .warmup:
-            startPhase(.work, duration: workout.workDuration)
-            soundManager.playIntervalChime()
-            soundManager.triggerHaptic()
+            startPhase(.work, duration: workout.workDuration, startingAt: start)
             
         case .work:
             if currentRound < workout.rounds {
-                startPhase(.rest, duration: workout.restDuration)
-                soundManager.playIntervalChime()
-                soundManager.triggerHaptic()
+                startPhase(.rest, duration: workout.restDuration, startingAt: start)
             } else {
-                completeWorkout()
+                completeWorkout(playCues: playCues)
+                return
             }
             
         case .rest:
             currentRound += 1
-            startPhase(.work, duration: workout.workDuration)
-            soundManager.playIntervalChime()
-            soundManager.triggerHaptic()
+            startPhase(.work, duration: workout.workDuration, startingAt: start)
 
         case .customInterval(let index):
             let nextIndex = index + 1
             if nextIndex < expandedIntervals.count {
                 currentIntervalIndex = nextIndex
                 let next = expandedIntervals[nextIndex]
-                startPhase(.customInterval(index: nextIndex), duration: next.duration)
-                soundManager.playIntervalChime()
-                soundManager.triggerHaptic()
+                startPhase(.customInterval(index: nextIndex), duration: next.duration, startingAt: start)
             } else {
-                completeWorkout()
+                completeWorkout(playCues: playCues)
+                return
             }
             
         case .complete:
             stop()
+            return
+        }
+
+        if playCues {
+            soundManager.playIntervalChime()
+            soundManager.triggerHaptic()
         }
     }
     
-    private func completeWorkout() {
+    private func completeWorkout(playCues: Bool = true) {
         currentPhase = .complete
         remainingTime = 0
         phaseEndDate = nil
         timer?.invalidate()
         timer = nil
         isCompleted = true
+        soundManager.stopKeepAlive()
 
-        soundManager.playIntervalChime()
-        soundManager.triggerHaptic(style: .success)
+        if playCues {
+            soundManager.playIntervalChime()
+            soundManager.triggerHaptic(style: .success)
+        }
     }
     
     // MARK: - Preset Management
@@ -412,53 +429,138 @@ struct Workout: Identifiable, Codable {
 class SoundManager {
     static let shared = SoundManager()
     
-    private var countdownBeepPlayer: AVAudioPlayer?
-    private var intervalChimePlayer: AVAudioPlayer?
+    private let countdownBeep = CuePlayer(resource: "countdown_beep", volume: 0.8, fallbackSoundID: 1103)
+    private let intervalChime = CuePlayer(resource: "interval_chime", volume: 1.0, fallbackSoundID: 1013)
+
+    // iOS suspends a backgrounded app within seconds unless it is actively
+    // playing audio (with the "audio" background mode). While a workout is
+    // running we loop silence through this engine so the timer keeps ticking
+    // and cues keep sounding when the user switches to another app.
+    private let keepAliveEngine = AVAudioEngine()
+    private let silencePlayer = AVAudioPlayerNode()
+    private var keepAliveRequested = false
+    private var isActivatingKeepAlive = false
+
+    private init() {
+        observeAudioEvents()
+    }
     
-    private init() {}
-    
+    /// Only sets the category. The session isn't activated until a workout
+    /// starts, so launching the app never interrupts the user's music.
     func setupAudioSession() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
+        sessionQueue.async {
             // Use .playback so sounds bypass the silent switch, and .mixWithOthers
             // so the user's background audio (music, podcasts) keeps playing while
             // our beeps and chimes play over the top.
-            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try audioSession.setActive(true)
-            loadAudioFiles()
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        }
+    }
+
+    /// Audio session calls can block, so they run on this serial queue instead
+    /// of the main thread. Being serial also guarantees the category is set
+    /// before any activation.
+    private let sessionQueue = DispatchQueue(label: "SoundManager.session")
+
+    /// Activates the audio session without blocking the main thread, then
+    /// calls `completion` on the main actor with whether activation succeeded.
+    private func activateSession(then completion: @escaping @MainActor @Sendable (Bool) -> Void) {
+        sessionQueue.async {
+            if #available(iOS 27.0, *) {
+                AVAudioSession.sharedInstance().activate { success, _ in
+                    Task { @MainActor in completion(success) }
+                }
+            } else {
+                // Pre-iOS 27 has no async activate; this blocks, but only the session queue.
+                let success = (try? AVAudioSession.sharedInstance().setActive(true)) != nil
+                Task { @MainActor in completion(success) }
+            }
+        }
+    }
+
+    /// Starts looping silence so the app stays alive in the background.
+    func startKeepAlive() {
+        keepAliveRequested = true
+        guard !keepAliveEngine.isRunning, !isActivatingKeepAlive else { return }
+
+        isActivatingKeepAlive = true
+        activateSession { [weak self] success in
+            guard let self else { return }
+            isActivatingKeepAlive = false
+            // The workout may have been paused or stopped while activating.
+            guard success, keepAliveRequested, !keepAliveEngine.isRunning else { return }
+            startSilenceLoop()
+        }
+    }
+
+    private func startSilenceLoop() {
+        // Build the engine graph on first use rather than at launch, so the
+        // app doesn't set up audio output until a workout actually starts.
+        if silencePlayer.engine == nil {
+            keepAliveEngine.attach(silencePlayer)
+            keepAliveEngine.connect(silencePlayer, to: keepAliveEngine.mainMixerNode, format: nil)
+        }
+
+        let format = silencePlayer.outputFormat(forBus: 0)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(format.sampleRate)) else { return }
+        buffer.frameLength = buffer.frameCapacity
+        if let channels = buffer.floatChannelData {
+            for channel in 0..<Int(format.channelCount) {
+                channels[channel].update(repeating: 0, count: Int(buffer.frameLength))
+            }
+        }
+
+        do {
+            try keepAliveEngine.start()
+            silencePlayer.scheduleBuffer(buffer, at: nil, options: .loops)
+            silencePlayer.play()
         } catch {}
     }
-    
-    private func loadAudioFiles() {
-        if let beepURL = Bundle.main.url(forResource: "countdown_beep", withExtension: "wav") {
-            countdownBeepPlayer = try? AVAudioPlayer(contentsOf: beepURL)
-            countdownBeepPlayer?.prepareToPlay()
-            countdownBeepPlayer?.volume = 0.8
+
+    /// Stops the silent loop so the system can suspend the app normally.
+    func stopKeepAlive() {
+        keepAliveRequested = false
+        silencePlayer.stop()
+        keepAliveEngine.stop()
+    }
+
+    /// Restarts the silent loop after the system stopped it.
+    private func restartKeepAliveIfNeeded() {
+        guard keepAliveRequested else { return }
+        silencePlayer.stop()
+        keepAliveEngine.stop()
+        startKeepAlive()
+    }
+
+    /// Phone calls, Siri, alarms and route changes (e.g. unplugging headphones)
+    /// stop our audio. Restart it afterwards so cues and background
+    /// keep-alive continue for the rest of the workout.
+    private func observeAudioEvents() {
+        Task { [weak self] in
+            for await notification in NotificationCenter.default.notifications(
+                named: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance()
+            ) {
+                guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      AVAudioSession.InterruptionType(rawValue: rawType) == .ended else { continue }
+                self?.restartKeepAliveIfNeeded()
+            }
         }
-        
-        if let chimeURL = Bundle.main.url(forResource: "interval_chime", withExtension: "wav") {
-            intervalChimePlayer = try? AVAudioPlayer(contentsOf: chimeURL)
-            intervalChimePlayer?.prepareToPlay()
-            intervalChimePlayer?.volume = 1.0
+        Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(
+                named: .AVAudioEngineConfigurationChange,
+                object: self?.keepAliveEngine
+            ) {
+                self?.restartKeepAliveIfNeeded()
+            }
         }
     }
     
     func playCountdownBeep() {
-        if let player = countdownBeepPlayer {
-            player.currentTime = 0
-            player.play()
-        } else {
-            AudioServicesPlaySystemSound(1103)
-        }
+        countdownBeep.play()
     }
-    
+
     func playIntervalChime() {
-        if let player = intervalChimePlayer {
-            player.currentTime = 0
-            player.play()
-        } else {
-            AudioServicesPlaySystemSound(1013)
-        }
+        intervalChime.play()
     }
     
     private let hapticGenerator = UINotificationFeedbackGenerator()
@@ -469,6 +571,41 @@ class SoundManager {
 
     func prepareHaptic() {
         hapticGenerator.prepare()
+    }
+}
+
+/// Plays a short bundled sound cue. AVAudioPlayer touches the audio session
+/// synchronously when preparing and playing, so the player is only ever used
+/// on a private serial queue to keep those calls off the main thread.
+/// The file is loaded on first play rather than at init, because preparing a
+/// player activates the audio session, which would interrupt other audio at launch.
+nonisolated final class CuePlayer: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "SoundManager.CuePlayer", qos: .userInteractive)
+    private let resource: String
+    private let volume: Float
+    private let fallbackSoundID: SystemSoundID
+    private var player: AVAudioPlayer?
+
+    init(resource: String, volume: Float, fallbackSoundID: SystemSoundID) {
+        self.resource = resource
+        self.volume = volume
+        self.fallbackSoundID = fallbackSoundID
+    }
+
+    /// Plays from the start, or a system sound if the file couldn't be loaded.
+    func play() {
+        queue.async { [self] in
+            if player == nil, let url = Bundle.main.url(forResource: resource, withExtension: "wav") {
+                player = try? AVAudioPlayer(contentsOf: url)
+                player?.volume = volume
+            }
+            if let player {
+                player.currentTime = 0
+                player.play()
+            } else {
+                AudioServicesPlaySystemSound(fallbackSoundID)
+            }
+        }
     }
 }
 
