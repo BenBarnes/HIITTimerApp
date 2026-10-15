@@ -465,13 +465,7 @@ class SoundManager {
     /// calls `completion` on the main actor with whether activation succeeded.
     private func activateSession(then completion: @escaping @MainActor @Sendable (Bool) -> Void) {
         sessionQueue.async {
-            if #available(iOS 27.0, *) {
-                AVAudioSession.sharedInstance().activate { success, _ in
-                    Task { @MainActor in completion(success) }
-                }
-            } else {
-                // Pre-iOS 27 has no async activate; this blocks, but only the session queue.
-                let success = (try? AVAudioSession.sharedInstance().setActive(true)) != nil
+            AVAudioSession.sharedInstance().activate { success, _ in
                 Task { @MainActor in completion(success) }
             }
         }
