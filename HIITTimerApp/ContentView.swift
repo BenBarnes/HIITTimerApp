@@ -96,6 +96,10 @@ struct MenuButton: View {
 
 struct WorkoutActiveView: View {
     var workoutManager: WorkoutManager
+    @State private var showingStopConfirmation = false
+    // Whether the workout was running when stop was pressed, so cancelling
+    // the confirmation only resumes a workout this view paused itself.
+    @State private var resumeOnCancel = false
 
     var body: some View {
         if workoutManager.isCompleted {
@@ -168,7 +172,12 @@ struct WorkoutActiveView: View {
                     }
 
                     Button(action: {
-                        workoutManager.stop()
+                        // Pause while the user decides whether to end the workout.
+                        resumeOnCancel = !workoutManager.isPaused
+                        if resumeOnCancel {
+                            workoutManager.pause()
+                        }
+                        showingStopConfirmation = true
                     }) {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 30))
@@ -176,6 +185,25 @@ struct WorkoutActiveView: View {
                             .frame(width: 70, height: 70)
                             .background(Color.red)
                             .clipShape(Circle())
+                    }
+                    .confirmationDialog(
+                        "End this workout?",
+                        isPresented: $showingStopConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("End Workout", role: .destructive) {
+                            workoutManager.stop()
+                        }
+                        // No `.cancel` role: when the dialog is shown as a popover,
+                        // iOS hides cancel-role buttons and relies on tapping outside.
+                        Button("Cancel") {}
+                    }
+                    .onChange(of: showingStopConfirmation) { _, isShowing in
+                        // Covers both the Cancel button and tapping outside the
+                        // dialog. After "End Workout" the workout is no longer active.
+                        if !isShowing, resumeOnCancel, workoutManager.isActive {
+                            workoutManager.resume()
+                        }
                     }
 
                     Button(action: {
